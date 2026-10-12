@@ -1,4 +1,8 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.8"
+# dependencies = []
+# ///
 """Build a vocabulary practice topic (recognise + produce) from a book word list.
 
 Source format (markdown), one entry per paragraph:
@@ -10,7 +14,7 @@ INDEX.md. Rebuilding an existing topic (--force) keeps progress.jsonl,
 quiz-history.md, plan.md and everything in session.md from the
 `<!-- tutor-notes -->` line on, and backs the old folder up first.
 
-  python3 <skill>/scripts/build_vocab_deck.py --source ~/books/dune_volume_1_words.md \\
+  uv run <skill>/scripts/build_vocab_deck.py --source ~/books/dune_volume_1_words.md \\
       --slug dune-vol1-vocab --group "English · Dune" \\
       --title "Volume 1" --order 1 --book "Dune Vol. 1" --dry-run
 
@@ -321,7 +325,7 @@ def build(a, out):
                + ''.join(f"- `{w['word']}` had no book sentence; a practice sentence was written and is marked as such.\n" for w in words if w['written'])
                + (f"- {len(repeats)} words were already in earlier volumes — left out here, logged as don't know there: "
                   + ', '.join(f"{r['new_word']} ({r['title']})" for r in repeats) + ".\n" if repeats else '')
-               + f"- Progress: `python3 <skill>/scripts/log_progress.py --topic {a.slug} --task b03-produce --result correct|wrong|dont_know --question \"...\"`.\n\n"
+               + f"- Progress: `uv run <skill>/scripts/log_progress.py --topic {a.slug} --task b03-produce --result correct|wrong|dont_know --question \"...\"`.\n\n"
                "## Batches\n\n" + '\n'.join(f"- **{bi:02d}** — " + ', '.join(w['word'] for w in b) for bi, b in enumerate(batches, 1)) + '\n')
 
     meta = {'title': a.title, 'group': a.group, 'order': a.order}
@@ -355,7 +359,7 @@ def log_repeats(a, dest, old):
                '--result', 'dont_know', '--source', 'probe', '--qid', word_id(r['word']), '--run', f'repeat-{a.slug}',
                '--question', f"Didn't know “{r['word']}” again — met it in {a.title}",
                '--note', f"Not repeated in {a.slug}; retrain it here."]
-        res = subprocess.run(cmd, capture_output=True, text=True, env={**os.environ, 'TUTOR_HOME': LEARNING})
+        res = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', errors='replace', env={**os.environ, 'TUTOR_HOME': LEARNING})
         r['logged'] = res.returncode == 0
         print(('logged' if r['logged'] else 'LOG FAILED') + f": {r['word']} → {r['from']} {r['task']}" +
               ('' if r['logged'] else f" ({res.stderr.strip()})"))
@@ -452,4 +456,5 @@ def main():
 
 
 if __name__ == '__main__':
+    lp.utf8_stdio()
     main()

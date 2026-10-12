@@ -9,11 +9,13 @@ An [Agent Skill](https://agentskills.io) that turns your coding agent into a pat
 - **A local study viewer** (plan, lesson, flashcards, cheat sheet, exercises, exam and progress modes). It runs offline from a small Python server.
 - **Vocabulary decks** built from a word list you collect while reading a book.
 
-Works with **Claude Code**, **GitHub Copilot** (VS Code, CLI, coding agent), **OpenAI Codex**, **Cursor**, **Gemini CLI** and other tools that read `SKILL.md` skills.
+Works with **Claude Code**, **GitHub Copilot** (VS Code, CLI, coding agent), **OpenAI Codex**, **Cursor**, **Gemini CLI** and other tools that read `SKILL.md` skills, on **Linux, macOS and Windows**.
 
 ## Requirements
 
-- Python 3.8+ (standard library only)
+- [uv](https://docs.astral.sh/uv/getting-started/installation/). The scripts are standard-library Python, run with `uv run`. uv picks a Python 3.8+ on its own and downloads one if none is installed, so you don't need to install Python yourself.
+  - Linux / macOS: `curl -LsSf https://astral.sh/uv/install.sh | sh`
+  - Windows (PowerShell): `powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"`
 - A browser, for the study viewer
 
 ## Install
@@ -42,7 +44,7 @@ git clone https://github.com/ManuLasker/my-tutor.git
 cd my-tutor && ./install.sh
 ```
 
-This links `skills/tutor` into `~/.claude/skills/` (Claude Code) and `~/.agents/skills/` (Copilot, Codex, Cursor, Gemini CLI). Options:
+This needs bash (on Windows, Git Bash or WSL). It links `skills/tutor` into `~/.claude/skills/` (Claude Code) and `~/.agents/skills/` (Copilot, Codex, Cursor, Gemini CLI). Options:
 
 - `--copy`: copy instead of linking.
 - `--project DIR`: install for one repository only.
@@ -62,7 +64,7 @@ This links `skills/tutor` into `~/.claude/skills/` (Claude Code) and `~/.agents/
 Open the study viewer:
 
 ```bash
-python3 ~/.claude/skills/tutor/scripts/serve.py    # or wherever the skill is installed
+uv run ~/.claude/skills/tutor/scripts/serve.py    # or wherever the skill is installed
 ```
 
 Then open the printed URL. The tutor starts it for you after a lesson.
@@ -112,4 +114,5 @@ install.sh
 
 - **The `hooks` field** in `SKILL.md` is a Claude Code extension. Other tools ignore it, but the strict `skills-ref validate` reports it as an unexpected field. The hook is only a safety net: the skill's logging rule works without it.
 - **Keep the installed folder named `tutor`:** the hook finds its script by that name.
-- **Scripts are standard-library Python.** They resolve the data folder themselves, so the agent never edits `topics.json` or `progress.jsonl` by hand.
+- **Windows:** use the plugin or `npx skills` install. `install.sh` works in Git Bash, but Git Bash copies instead of symlinking unless symlinks are enabled, so `git pull` won't update that install. The Claude Code Stop hook runs through Git Bash, which Claude Code on Windows already requires.
+- **Scripts are standard-library Python, run with `uv run`.** They resolve the data folder themselves, so the agent never edits `topics.json` or `progress.jsonl` by hand.

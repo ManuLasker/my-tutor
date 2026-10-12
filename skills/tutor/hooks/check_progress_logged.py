@@ -1,4 +1,8 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.8"
+# dependencies = []
+# ///
 """Stop hook: don't let the tutor finish a turn that graded an answer without logging it.
 
 Contract (https://code.claude.com/docs/en/hooks.md, "Stop"):
@@ -117,7 +121,7 @@ def main():
     reason = (
         "You graded a learner's answer this turn (a line starting with 'Grade:') but did not "
         "run log_progress.py. Before finishing, log every answer you graded this turn, one "
-        "call each: python3 " + LOG_SCRIPT + " --topic <slug> --task <task> "
+        "call each: uv run \"" + LOG_SCRIPT + "\" --topic <slug> --task <task> "
         "--result correct|wrong|dont_know --question \"<question>\" --source chat|probe "
         "[--qid <id> (exam.json id if quizzing from it)] [--attempt N (2+ on a retry)] "
         "[--run <id> (same id for every answer in one quiz/session)] "

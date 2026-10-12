@@ -1,4 +1,8 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.8"
+# dependencies = []
+# ///
 """Study viewer server: static files + a small progress-logging endpoint.
 
 Serves two folders as one site, like `python3 -m http.server`:
@@ -11,7 +15,7 @@ It also accepts `POST /api/progress` so the Exam and Flashcards modes can
 append answers to `<topic>/progress.jsonl`.
 
 Usage:
-    python3 serve.py [--port 8080] [--bind 127.0.0.1]
+    uv run serve.py [--port 8080] [--bind 127.0.0.1]
 If the port is busy and --port wasn't given, the next free one (up to +10) is used.
 To always serve to the LAN, set "bind": "0.0.0.0" in ~/.config/tutor/config.json
 (or TUTOR_BIND=0.0.0.0).
@@ -160,6 +164,16 @@ def append_events(topic, events, topics):
 
 
 class Handler(SimpleHTTPRequestHandler):
+    # Don't trust the OS MIME table: on Windows it comes from the registry and can
+    # map .js/.css to text/plain, which browsers then refuse to apply.
+    extensions_map = {
+        **SimpleHTTPRequestHandler.extensions_map,
+        ".html": "text/html", ".css": "text/css", ".js": "text/javascript",
+        ".mjs": "text/javascript", ".json": "application/json", ".svg": "image/svg+xml",
+        ".md": "text/markdown; charset=utf-8", ".txt": "text/plain; charset=utf-8",
+        ".jsonl": "application/x-ndjson",
+    }
+
     def route(self):
         """Return (base_dir, parts) for the request path, or None if refused.
 
@@ -374,4 +388,5 @@ def main():
 
 
 if __name__ == "__main__":
+    lp.utf8_stdio()
     main()

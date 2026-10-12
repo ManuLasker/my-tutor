@@ -3,12 +3,12 @@ name: tutor
 description: Interactive tutor that teaches a topic in depth and makes it stick. It runs an optional probe, a dependency-map plan, Socratic chunked teaching with diagrams and real code, Q&A, flashcards, a cheat sheet, hands-on exercises, an exam question bank and a graded quiz. Everything is saved to a learning folder with a local study viewer, per-answer progress tracking and spaced review. Use whenever the user says "teach me X", "/tutor X", "I want to learn X", "quiz me on X", "practice X", "what should I review", or wants an explanation they can remember long-term. If the topic was taught before, offers weak-spot review, practice or a re-quiz instead of re-teaching. Also builds vocabulary decks (recognise + produce) from a book word list, e.g. "/tutor vocab for my book, volume 2".
 license: MIT
 metadata:
-  version: "2.0.0"
+  version: "2.1.0"
 hooks:
   Stop:
     - hooks:
         - type: command
-          command: 'for d in "${CLAUDE_PLUGIN_ROOT:-/nonexistent}/skills/tutor" "${CLAUDE_PROJECT_DIR:-.}/.claude/skills/tutor" "$HOME/.claude/skills/tutor" "$HOME/.agents/skills/tutor"; do f="$d/hooks/check_progress_logged.py"; [ -f "$f" ] && exec "$(command -v python3 || command -v python)" "$f"; done; exit 0'
+          command: 'for d in "${CLAUDE_PLUGIN_ROOT:-/nonexistent}/skills/tutor" "${CLAUDE_PROJECT_DIR:-.}/.claude/skills/tutor" "$HOME/.claude/skills/tutor" "$HOME/.agents/skills/tutor"; do f="$d/hooks/check_progress_logged.py"; [ -f "$f" ] && command -v uv >/dev/null 2>&1 && exec uv run --quiet "$f"; done; exit 0'
           timeout: 10
 ---
 
@@ -32,7 +32,7 @@ Run a structured, multi-phase teaching flow and save everything to disk, so the 
 | `serve.py` | Study viewer + interactive demos. Prints the URL; if one is already running for this TUTOR_HOME, prints its URL and exits |
 | `build_vocab_deck.py` | Vocabulary decks, see [vocab](references/vocab.md) |
 
-Always invoke them as `python3 ${CLAUDE_SKILL_DIR}/scripts/<name>.py …`. Never hand-edit `topics.json` or `progress.jsonl`.
+Always invoke them as `uv run "${CLAUDE_SKILL_DIR}/scripts/<name>.py" …`, on every OS (Linux, macOS, Windows). Never call `python`/`python3` directly: uv picks a suitable Python, and downloads one if needed. Keep the quotes, since the path may contain spaces. If `uv` is not found, stop and ask the learner to install it (https://docs.astral.sh/uv/getting-started/installation/). Never hand-edit `topics.json` or `progress.jsonl`.
 
 **Start of every session:** if TUTOR_HOME has no `topics.json`, run `topics.py init`. Then read `TUTOR_HOME/learner.md`, the learner's level, background and preferences, and let it override the defaults below. If it is still the blank template, ask 2–3 short questions (level, what they already know well, how they like to be taught) and fill it in.
 
@@ -65,10 +65,10 @@ TUTOR_HOME/
 Every graded answer, wherever it happens (chat quiz, probe, check-for-understanding, viewer exam, flashcard mark), becomes one line in `<slug>/progress.jsonl`. That record is how a later session knows what the learner actually knows. Schema and field rules: [formats § progress.jsonl](references/formats.md#progressjsonl).
 
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/log_progress.py --topic <slug> --task 1.1 --result correct|wrong|dont_know \
+uv run "${CLAUDE_SKILL_DIR}/scripts/log_progress.py" --topic <slug> --task 1.1 --result correct|wrong|dont_know \
   --question "..." [--qid c3-temp-ranking] [--attempt 2] [--answer "..."] [--note "..."] [--source chat|probe] [--run <id>]
-python3 ${CLAUDE_SKILL_DIR}/scripts/log_progress.py --topic <slug> --last 30     # recent history (add --json for raw)
-python3 ${CLAUDE_SKILL_DIR}/scripts/log_progress.py --due [--topic <slug>]       # spaced review: what's due now
+uv run "${CLAUDE_SKILL_DIR}/scripts/log_progress.py" --topic <slug> --last 30     # recent history (add --json for raw)
+uv run "${CLAUDE_SKILL_DIR}/scripts/log_progress.py" --due [--topic <slug>]       # spaced review: what's due now
 ```
 
 A non-zero exit means nothing was logged. Fix the arguments and rerun. "Unknown topic" means you skipped `topics.py add`.
@@ -133,7 +133,7 @@ Generate these files (in background subagents if available, so the session keeps
 - `exercises.json` + `exercises/`: 10–15 exercises, with `expected` produced by **running** the reference solution.
 - `exam.json`: about 12–15 original exam-style questions, after researching the official objectives.
 
-Then run `validate.py <slug>` and fix every ERROR. Start the viewer in the background with `python3 ${CLAUDE_SKILL_DIR}/scripts/serve.py`. If one is already running, it just prints that one's URL. Give the learner the printed URL with `?topic=<slug>` (optionally `&mode=plan|lesson|flashcards|cheatsheet|exercises|exam|progress`). When the server is reachable from the LAN (`--bind 0.0.0.0` or the config), mention once that everyone on the network can read the notes and write progress, unless `learner.md` shows they chose that deliberately. Show counts and a few sample cards, not the whole deck.
+Then run `validate.py <slug>` and fix every ERROR. Start the viewer in the background with `uv run "${CLAUDE_SKILL_DIR}/scripts/serve.py"`. If one is already running, it just prints that one's URL. Give the learner the printed URL with `?topic=<slug>` (optionally `&mode=plan|lesson|flashcards|cheatsheet|exercises|exam|progress`). When the server is reachable from the LAN (`--bind 0.0.0.0` or the config), mention once that everyone on the network can read the notes and write progress, unless `learner.md` shows they chose that deliberately. Show counts and a few sample cards, not the whole deck.
 
 ### Step 5: Quiz
 

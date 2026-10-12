@@ -1,20 +1,24 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.8"
+# dependencies = []
+# ///
 """Append one graded-answer event to <topic>/progress.jsonl (stdlib only).
 
 Used by the /tutor skill every time it grades a learner's answer in chat:
 
-    python3 <skill>/scripts/log_progress.py --topic SLUG --task 1.1 \
+    uv run <skill>/scripts/log_progress.py --topic SLUG --task 1.1 \
         --result correct|wrong|dont_know --question "..." \
         [--qid ID] [--attempt 2] [--answer "..."] [--note "..."] \
         [--source chat|probe] [--run ID]
 
 Resume helper (prints the last N events for a topic, oldest first):
 
-    python3 <skill>/scripts/log_progress.py --topic SLUG --last 30 [--json]
+    uv run <skill>/scripts/log_progress.py --topic SLUG --last 30 [--json]
 
 Spaced review (what is due today, for one topic or all of them):
 
-    python3 <skill>/scripts/log_progress.py --due [--topic SLUG] [--json]
+    uv run <skill>/scripts/log_progress.py --due [--topic SLUG] [--json]
 
 Data lives in $TUTOR_HOME, else "home" in ~/.config/tutor/config.json, else
 ~/Documents/learning; never next to this script.
@@ -36,6 +40,17 @@ try:
     import fcntl
 except ImportError:  # Windows: no flock; serve.py still serializes its own writes
     fcntl = None
+
+
+def utf8_stdio():
+    """Print UTF-8 whatever the OS locale.
+
+    On Windows, piped output (how agents run these scripts) uses the ANSI code page,
+    which can't encode "→", "—" or most learner text and raises UnicodeEncodeError.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="replace")
 
 # Settings: environment variable > ~/.config/tutor/config.json > default.
 #   {"home": "~/Documents/learning", "bind": "0.0.0.0"}
@@ -396,4 +411,5 @@ def main(argv=None):
 
 
 if __name__ == "__main__":
+    utf8_stdio()
     sys.exit(main())

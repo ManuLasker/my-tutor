@@ -359,7 +359,7 @@
                 <span x-show="examSave && examSave.state === 'saving'">Saving answers to progress…</span>
                 <span x-show="examSave && examSave.state === 'saved'" x-text="examSave ? `💾 Saved ${examSave.saved} answers to progress` : ''"></span>
                 <span x-show="examSave && examSave.state === 'error' && examSave.error" x-text="examSave ? examSave.error : ''"></span>
-                <span x-show="examSave && examSave.state === 'error' && !examSave.error">Not saved to disk — start the viewer with <code>python3 serve.py</code></span>
+                <span x-show="examSave && examSave.state === 'error' && !examSave.error">Not saved to disk — start the viewer with <code>uv run serve.py</code></span>
               </p>
               <button class="retake-btn" @click="retakeExam()">↻ Retake (shuffled)</button>
             </section>
@@ -494,7 +494,7 @@
       <div class="empty">
         <p x-text="progressMissing ? 'No progress recorded for this topic yet.' : 'progress.jsonl has no valid entries yet.'"></p>
         <p>Answers are appended to <code x-text="`${topic}/progress.jsonl`"></code> when you
-          <strong>Submit</strong> an exam while the viewer runs with <code>python3 serve.py</code>,
+          <strong>Submit</strong> an exam while the viewer runs with <code>uv run serve.py</code>,
           and when the tutor logs quiz answers during a chat session.</p>
       </div>
     </template>

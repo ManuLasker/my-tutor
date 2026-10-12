@@ -23,7 +23,7 @@ A vocab topic's `session.md` says "practice deck". Route by what exists:
 1. **Ask** (one question round, skip what's already clear): the word-list file (list the folder named in `learner.md`; ask for it and save it there if missing), the **group** (one per book, e.g. `English · Dune` — reuse the exact existing group string from other `meta.json` files), the **title** (`Volume 2`), and **order**. Derive the slug `<book-short>-vol<N>-vocab` (e.g. `dune-vol2-vocab`) and `--book` label (`Dune Vol. 2`).
 2. **Dry run** — touches nothing:
    ```bash
-   python3 ${CLAUDE_SKILL_DIR}/scripts/build_vocab_deck.py --source <file> --slug <slug> \
+   uv run "${CLAUDE_SKILL_DIR}/scripts/build_vocab_deck.py" --source <file> --slug <slug> \
      --group "<group>" --title "<title>" --order <n> --book "<label>" --dry-run
    ```
    Exit 2 lists PROBLEMS: an entry with no example sentence, or a word the script can't find in its sentence. Fix via an overrides JSON in the scratchpad — `{"examples": {"word": "Natural practice sentence."}, "story_terms": ["Name"], "repeats": ["word"]}` — write a sentence that uses the word exactly as the headword spells it, tell the user which sentences you wrote, and rerun with `--overrides <path>`. Written sentences are labelled "not from the book" in the deck.

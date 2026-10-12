@@ -18,7 +18,7 @@ Build one only when it genuinely helps: event loops, sorting/graph algorithms, s
 Use the same server as the viewer. Running it again is safe: if it's already up, it prints the existing URL and exits.
 
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/serve.py
+uv run "${CLAUDE_SKILL_DIR}/scripts/serve.py"
 ```
 
 Open the URL it prints, replacing `study.html` with `<slug>/interactive/`. It binds `127.0.0.1` (or the config's `"bind"`) and picks the first free port from 8080. For other devices, use `--bind 0.0.0.0` (or the config) and the printed LAN URL. Unless `learner.md` shows the learner chose LAN access deliberately, warn once that everyone on the network can then read their notes and write progress.

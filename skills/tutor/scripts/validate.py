@@ -1,7 +1,11 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.8"
+# dependencies = []
+# ///
 """Check a topic's study files against references/formats.md (stdlib only).
 
-    python3 <skill>/scripts/validate.py SLUG [SLUG ...]   # or --all
+    uv run <skill>/scripts/validate.py SLUG [SLUG ...]   # or --all
 
 Checks meta.json, flashcards.json, cheatsheet.json, exercises.json (+ that
 every test input exists), exam.json (per-type answer rules) and plan.md (map
@@ -273,4 +277,5 @@ def main(argv=None):
 
 
 if __name__ == "__main__":
+    lp.utf8_stdio()
     sys.exit(main())

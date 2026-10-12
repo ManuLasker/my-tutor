@@ -27,8 +27,8 @@ while [ $# -gt 0 ]; do
 done
 
 [ -f "$SRC/SKILL.md" ] || { echo "skill not found at $SRC" >&2; exit 1; }
-PY="$(command -v python3 || command -v python || true)"
-[ -n "$PY" ] || echo "warning: python3 not found; the tutor's scripts need Python 3.8+" >&2
+UV="$(command -v uv || true)"
+[ -n "$UV" ] || echo "warning: uv not found; the tutor runs its scripts with uv: https://docs.astral.sh/uv/getting-started/installation/" >&2
 
 targets=()
 [ "$ONLY" != agents ] && targets+=("$BASE/.claude/skills")
@@ -70,8 +70,8 @@ for parent in "${targets[@]}"; do
   fi
 done
 
-if [ -n "$PY" ]; then
-  "$PY" "$SRC/scripts/topics.py" init
+if [ -n "$UV" ]; then
+  "$UV" run --quiet "$SRC/scripts/topics.py" init
 fi
 
 cat <<'EOF'

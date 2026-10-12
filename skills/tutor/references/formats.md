@@ -1,6 +1,6 @@
 # File formats
 
-Read the section you need before writing that file. `python3 ${CLAUDE_SKILL_DIR}/scripts/validate.py <slug>` checks every file below (exit 0 = all good). Run it after writing or changing any of them.
+Read the section you need before writing that file. `uv run "${CLAUDE_SKILL_DIR}/scripts/validate.py" <slug>` checks every file below (exit 0 = all good). Run it after writing or changing any of them.
 
 ## Contents
 

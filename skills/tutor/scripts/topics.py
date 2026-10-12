@@ -1,16 +1,20 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.8"
+# dependencies = []
+# ///
 """Set up the learning folder and register topics (stdlib only).
 
-    python3 <skill>/scripts/topics.py init
+    uv run <skill>/scripts/topics.py init
         Create $TUTOR_HOME (default ~/Documents/learning) with topics.json,
         INDEX.md and learner.md if missing. Never overwrites anything.
 
-    python3 <skill>/scripts/topics.py add SLUG [--title T] [--group G] [--order N]
+    uv run <skill>/scripts/topics.py add SLUG [--title T] [--group G] [--order N]
         Create <SLUG>/, add SLUG to topics.json (deduped, sorted), and write
         <SLUG>/meta.json. Run it as soon as a topic folder is needed: progress
         logging rejects topics that are not registered.
 
-    python3 <skill>/scripts/topics.py list [--json]
+    uv run <skill>/scripts/topics.py list [--json]
         Registered topics with title, group and whether a session exists.
 
 Prints one line per action; exits non-zero (nothing half-written) on error.
@@ -20,6 +24,7 @@ import json
 import os
 import sys
 import tempfile
+import time
 
 sys.dont_write_bytecode = True
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -65,7 +70,14 @@ def write_atomic(path, text):
         os.chmod(tmp, 0o644)  # mkstemp makes 0600; keep normal file permissions
         with os.fdopen(fd, "w", encoding="utf-8") as f:
             f.write(text)
-        os.replace(tmp, path)
+        for attempt in range(5):
+            try:
+                os.replace(tmp, path)
+                break
+            except PermissionError:  # Windows: target briefly open elsewhere (viewer, antivirus)
+                if attempt == 4:
+                    raise
+                time.sleep(0.1 * (attempt + 1))
     except BaseException:
         os.unlink(tmp)
         raise
@@ -151,4 +163,5 @@ def main(argv=None):
 
 
 if __name__ == "__main__":
+    lp.utf8_stdio()
     sys.exit(main())
