@@ -1,0 +1,667 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Study</title>
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="stylesheet" href="vendor/github-dark.min.css">
+  <link rel="stylesheet" href="study.css">
+  <script src="vendor/marked.min.js"></script>
+  <script src="vendor/highlight.min.js"></script>
+  <!-- Mermaid v11.17.2 UMD bundle (cdn.jsdelivr.net/npm/mermaid@11.17.2/dist/mermaid.min.js), defines
+       the global `mermaid`. Loaded lazily-safe: study.js initializes it on first use, so the CDN
+       fallback below may arrive late and fire `mermaid-ready` to trigger a render pass. -->
+  <script defer src="vendor/mermaid.min.js"
+          onerror="(function(){var s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/mermaid@11.17.2/dist/mermaid.min.js';s.onload=function(){window.dispatchEvent(new Event('mermaid-ready'))};s.onerror=function(){window.dispatchEvent(new Event('mermaid-failed'))};document.head.appendChild(s)})()"></script>
+  <!-- svg-pan-zoom v3.6.2 UMD bundle (cdn.jsdelivr.net/npm/svg-pan-zoom@3.6.2/dist/svg-pan-zoom.min.js),
+       defines the global `svgPanZoom` (pan / zoom / fullscreen on every mermaid diagram). Same pattern:
+       a late CDN fallback fires `svgpanzoom-ready` and study.js upgrades the diagrams already drawn. -->
+  <script defer src="vendor/svg-pan-zoom.min.js"
+          onerror="(function(){var s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/svg-pan-zoom@3.6.2/dist/svg-pan-zoom.min.js';s.onload=function(){window.dispatchEvent(new Event('svgpanzoom-ready'))};document.head.appendChild(s)})()"></script>
+  <script defer src="vendor/alpinejs.min.js"></script>
+</head>
+<body x-data="study" x-cloak>
+  <header>
+    <label class="topic-label">Topic
+      <select x-model="topic" @change="loadTopic(); $event.target.blur()">
+        <template x-for="g in topicGroups" :key="g.group">
+          <optgroup :label="g.group">
+            <template x-for="t in g.items" :key="t.slug">
+              <option :value="t.slug" :selected="t.slug === topic" x-text="t.text"></option>
+            </template>
+          </optgroup>
+        </template>
+      </select>
+    </label>
+
+    <div class="mode-toggle" role="tablist">
+      <button :class="{active: mode === 'plan'}" @click="setMode('plan')">Plan</button>
+      <button :class="{active: mode === 'lesson'}" @click="setMode('lesson')">Lesson</button>
+      <button :class="{active: mode === 'flashcards'}" @click="setMode('flashcards')">Flashcards</button>
+      <button :class="{active: mode === 'cheatsheet'}" @click="setMode('cheatsheet')">Cheat sheet</button>
+      <button :class="{active: mode === 'exercises'}" @click="setMode('exercises')">Exercises</button>
+      <button :class="{active: mode === 'exam'}" @click="setMode('exam')">Exam</button>
+      <button :class="{active: mode === 'progress'}" @click="setMode('progress')">Progress</button>
+    </div>
+
+    <div class="controls" x-show="mode === 'flashcards'">
+      <button @click="prev()" title="prev (←)">◀</button>
+      <span class="counter" x-text="filtered.length ? `${index + 1} / ${filtered.length}` : '—'"></span>
+      <button @click="next()" title="next (→)">▶</button>
+      <button @click="shuffle()" title="shuffle (s)">⇄</button>
+      <label class="filter">
+        <input type="checkbox" x-model="unknownOnly" @change="onFilterChange()">
+        Unknown only
+      </label>
+      <span class="known-count">
+        <span class="cnt-known"   x-text="`✓ ${knownCount()}`"></span>
+        <span class="cnt-unknown" x-text="`✗ ${unknownCount()}`"></span>
+        <span class="cnt-total"   x-text="`/ ${cards.length}`"></span>
+      </span>
+    </div>
+
+    <div class="controls" x-show="mode === 'exam'">
+      <!-- Kept compact so the header stays one row at ~1280px (date lives in the tooltip). -->
+      <span class="counter" x-show="exam.length" x-text="`${examAnsweredCount()}/${exam.length} answered`"></span>
+      <label class="filter" title="informational countdown at real exam pace (90 min / 65 q ≈ 83 s each)">
+        <input type="checkbox" :checked="examTimerOn" @change="toggleExamTimer()">
+        ⏱<span class="sr-only">Timer</span>
+      </label>
+      <span class="exam-timer" x-show="examTimerOn" :class="{ out: examRemaining <= 0 }"
+            x-text="examRemaining > 0 ? fmtTime(examRemaining) : 'time up'"></span>
+      <button @click="submitExam()" x-show="exam.length && !examResult" title="grade every question (unanswered = wrong)">Submit</button>
+      <button @click="retakeExam()" x-show="examResult">↻ Retake</button>
+      <span class="exam-last" x-show="examLast"
+            :title="examLast ? `last result: ${examLast.score}/${examLast.total} on ${examLast.date}` : ''"
+            x-text="examLast ? `last ${examLast.score}/${examLast.total}` : ''"></span>
+    </div>
+
+    <div class="controls" x-show="isDocMode()">
+      <button @click="loadDoc(mode)" :title="isDocMode() ? `re-read ${DOCS[mode].file}` : ''">↻ Reload</button>
+    </div>
+
+    <div class="controls" x-show="mode === 'progress'">
+      <span class="counter" x-show="progress && progress.total" x-text="progress ? `${progress.total} answers logged` : ''"></span>
+      <button @click="loadProgress()" title="re-read progress.jsonl">↻ Reload</button>
+    </div>
+  </header>
+
+  <!-- PLAN + LESSON MODES: one markdown-document view (plan.md / session.md), one pane per doc -->
+  <main x-show="isDocMode()" class="paged doc">
+    <template x-if="!topics.length">
+      <div class="empty">No topics yet. Run <code>/tutor &lt;topic&gt;</code> in Claude Code to add one.</div>
+    </template>
+
+    <!-- Every sidebar (doc / cheat sheet / exercises / exam / progress) uses the same
+         markup: aside.toc > h2.toc-title + ul.toc-list > li > a.toc-item[.toc-sub][.active]
+         with optional span.toc-num · span.toc-label · span.toc-badge. -->
+    <template x-for="k in docKinds" :key="k">
+      <div class="doc-pane" :id="`doc-${k}`" x-show="topics.length && mode === k">
+        <template x-if="k === 'plan' && docs.plan.loaded && docs.plan.missing">
+          <div class="empty">
+            <p>No plan for this topic yet — the tutor writes one in the plan step, before teaching.</p>
+            <p>It lives in <code x-text="`${topic}/plan.md`"></code> and shows the goal, probe result,
+              dependency map and chunk status.</p>
+          </div>
+        </template>
+
+        <template x-if="k === 'lesson' && docs.lesson.loaded && docs.lesson.missing">
+          <div class="empty">
+            <p>No lesson notes for this topic yet — the tutor writes session.md as each chunk is taught.</p>
+            <p>They live in <code x-text="`${topic}/session.md`"></code>.</p>
+          </div>
+        </template>
+
+        <template x-if="docs[k].html">
+          <div class="toc-layout doc-layout">
+            <aside class="toc" x-show="docs[k].toc.length">
+              <h2 class="toc-title" x-text="DOCS[k].title"></h2>
+              <ul class="toc-list">
+                <template x-for="h in docs[k].toc" :key="h.id">
+                  <li>
+                    <a class="toc-item" :href="`#${h.id}`" :data-id="h.id"
+                       :class="{ 'toc-sub': h.level === 3, active: tocActive[k] === h.id }"
+                       :aria-current="tocActive[k] === h.id ? 'true' : null"
+                       @click.prevent="tocGo(k, h.id)"><span class="toc-label" x-text="h.text"></span></a>
+                  </li>
+                </template>
+              </ul>
+            </aside>
+            <article class="content">
+              <div class="cheat-body doc-body" :class="`${k}-body`" x-html="docs[k].html"></div>
+            </article>
+          </div>
+        </template>
+      </div>
+    </template>
+  </main>
+
+  <!-- FLASHCARDS MODE -->
+  <main x-show="mode === 'flashcards'">
+    <template x-if="!topics.length">
+      <div class="empty">No topics yet. Run <code>/tutor &lt;topic&gt;</code> in Claude Code to add one.</div>
+    </template>
+
+    <template x-if="topics.length && !filtered.length">
+      <div class="empty">
+        <p>Nothing to show.</p>
+        <p x-show="unknownOnly && cards.length">You've marked every card as known. <button @click="resetKnown()">Reset progress</button></p>
+      </div>
+    </template>
+
+    <template x-if="filtered.length">
+      <div class="stage" @click="flip()">
+        <div class="card"
+             :class="{ flipped, 'flash-known': flash === 'known', 'flash-unknown': flash === 'unknown' }">
+          <div class="face front" x-html="renderQ()"></div>
+          <div class="face back"  x-html="renderA()"></div>
+        </div>
+        <div class="status-badge" :class="currentStatus()" x-text="statusLabel()"></div>
+      </div>
+    </template>
+
+    <div class="hint" x-show="filtered.length && !flipped">click card or press <span class="mono">space</span> to reveal</div>
+    <div class="hint actions" x-show="filtered.length && flipped">
+      <button @click.stop="markKnown(true)"  class="ok">✓ Got it&nbsp;<span class="mono">k</span></button>
+      <button @click.stop="markKnown(false)" class="no">✗ Need practice&nbsp;<span class="mono">u</span></button>
+      <button @click.stop="next()" class="nav">Next&nbsp;<span class="mono">→</span></button>
+    </div>
+  </main>
+
+  <!-- CHEAT SHEET MODE -->
+  <main x-show="mode === 'cheatsheet'" class="paged cheatsheet">
+    <template x-if="!cheatsheet.length">
+      <div class="empty">No cheat sheet for this topic yet.</div>
+    </template>
+
+    <template x-if="cheatsheet.length">
+      <div class="toc-layout cheatsheet-layout">
+        <aside class="toc">
+          <h2 class="toc-title">Sections</h2>
+          <ul class="toc-list">
+            <template x-for="(section, i) in cheatsheet" :key="i">
+              <li>
+                <a class="toc-item" :href="`#section-${i}`" :data-id="`section-${i}`"
+                   :class="{ active: tocActive.cheatsheet === `section-${i}` }"
+                   :aria-current="tocActive.cheatsheet === `section-${i}` ? 'true' : null"
+                   @click.prevent="tocGo('cheatsheet', `section-${i}`)"><span class="toc-label" x-text="section.title"></span></a>
+              </li>
+            </template>
+          </ul>
+        </aside>
+
+        <article class="content" id="cheatsheet-content">
+          <template x-for="(section, i) in cheatsheet" :key="i">
+            <section :id="`section-${i}`" class="cheat-section">
+              <h2 class="cheat-h" x-text="section.title"></h2>
+              <div class="cheat-body" x-html="renderSection(section.content)"></div>
+            </section>
+          </template>
+        </article>
+      </div>
+    </template>
+  </main>
+
+  <!-- EXERCISES MODE -->
+  <main x-show="mode === 'exercises'" class="paged exercises">
+    <template x-if="!exercises.length">
+      <div class="empty">No exercises for this topic yet.</div>
+    </template>
+
+    <template x-if="exercises.length">
+      <div class="toc-layout exercises-layout">
+        <aside class="toc">
+          <h2 class="toc-title">Exercises</h2>
+          <ul class="toc-list">
+            <template x-for="(ex, i) in exercises" :key="ex.id">
+              <li>
+                <a class="toc-item" href="#" @click.prevent="exIndex = i"
+                   :class="{ active: exIndex === i }" :aria-current="exIndex === i ? 'true' : null">
+                  <span class="toc-num" x-text="(i+1) + '.'"></span>
+                  <span class="toc-label" x-text="ex.title"></span>
+                  <span class="toc-badge diff" :class="ex.difficulty" x-text="ex.difficulty"></span>
+                </a>
+              </li>
+            </template>
+          </ul>
+        </aside>
+
+        <article class="content">
+          <template x-if="exercises[exIndex]">
+            <div class="exercise">
+              <h2 class="ex-title">
+                <span x-text="exercises[exIndex].title"></span>
+                <span class="diff" :class="exercises[exIndex].difficulty" x-text="exercises[exIndex].difficulty"></span>
+              </h2>
+
+              <div class="ex-prompt" x-html="renderSection(exercises[exIndex].prompt)"></div>
+              <div class="ex-setup" x-show="exercises[exIndex].setup" x-html="renderSection('**Setup:** ' + (exercises[exIndex].setup || ''))"></div>
+
+              <h3 class="ex-h">Test cases</h3>
+              <template x-for="(t, ti) in exercises[exIndex].tests" :key="ti">
+                <div class="test-block">
+                  <div class="test-head">
+                    <span class="test-label" x-text="'Test ' + (ti+1)"></span>
+                    <a class="test-input" :href="inputUrl(exercises[exIndex].tests[ti].input)"
+                       target="_blank" x-text="exercises[exIndex].tests[ti].input"></a>
+                    <button class="preview-btn" @click="togglePreview(exercises[exIndex].id, ti)"
+                            x-text="st(exercises[exIndex].id, ti).previewOpen ? '▾ Hide input' : '▸ Show input'"></button>
+                  </div>
+
+                  <div class="test-preview" x-show="st(exercises[exIndex].id, ti).previewOpen">
+                    <template x-if="!st(exercises[exIndex].id, ti).previewLoaded && !st(exercises[exIndex].id, ti).previewErr">
+                      <div class="preview-loading">loading input…</div>
+                    </template>
+                    <template x-if="st(exercises[exIndex].id, ti).previewErr">
+                      <div class="preview-err" x-text="'could not load input: ' + st(exercises[exIndex].id, ti).previewErr"></div>
+                    </template>
+                    <template x-for="(f, fi) in st(exercises[exIndex].id, ti).previewItems" :key="fi">
+                      <div class="preview-file">
+                        <div class="preview-name" x-text="f.rel"></div>
+                        <pre x-text="f.content"></pre>
+                      </div>
+                    </template>
+                  </div>
+
+                  <textarea class="test-paste" rows="3"
+                            placeholder="paste your terminal output here…"
+                            x-model="st(exercises[exIndex].id, ti).pasted"></textarea>
+                  <div class="test-actions">
+                    <button class="check" @click="checkTest(exercises[exIndex].id, ti)">▶ Check</button>
+                    <span class="test-result"
+                          x-show="st(exercises[exIndex].id, ti).result"
+                          :class="st(exercises[exIndex].id, ti).result"
+                          x-text="st(exercises[exIndex].id, ti).result === 'pass' ? '✓ passed' : '✗ failed'"></span>
+                  </div>
+                  <div class="test-diff" x-show="st(exercises[exIndex].id, ti).result === 'fail'">
+                    <div><span class="diff-label">expected</span><pre x-text="st(exercises[exIndex].id, ti).expected"></pre></div>
+                    <div><span class="diff-label">got</span><pre x-text="st(exercises[exIndex].id, ti).got"></pre></div>
+                  </div>
+                </div>
+              </template>
+
+              <div class="ex-help">
+                <button class="hint-btn" @click="revealHint(exercises[exIndex].id)"
+                        x-show="st(exercises[exIndex].id).hintsShown < (exercises[exIndex].hints || []).length">
+                  💡 Hint
+                  <span x-text="'(' + st(exercises[exIndex].id).hintsShown + '/' + (exercises[exIndex].hints || []).length + ')'"></span>
+                </button>
+                <button class="sol-btn" @click="st(exercises[exIndex].id).solShown = !st(exercises[exIndex].id).solShown"
+                        x-text="st(exercises[exIndex].id).solShown ? 'Hide solution' : 'Reveal solution'"></button>
+              </div>
+
+              <ol class="hints" x-show="st(exercises[exIndex].id).hintsShown > 0">
+                <template x-for="(h, hi) in (exercises[exIndex].hints || []).slice(0, st(exercises[exIndex].id).hintsShown)" :key="hi">
+                  <li x-html="renderSection(h)"></li>
+                </template>
+              </ol>
+
+              <div class="solution" x-show="st(exercises[exIndex].id).solShown">
+                <h3 class="ex-h">Solution</h3>
+                <div x-html="renderSection('```bash\n' + exercises[exIndex].solution + '\n```')"></div>
+                <div class="sol-explain" x-html="renderSection(exercises[exIndex].explanation || '')"></div>
+              </div>
+            </div>
+          </template>
+        </article>
+      </div>
+    </template>
+  </main>
+
+  <!-- EXAM MODE -->
+  <main x-show="mode === 'exam'" class="paged exam">
+    <template x-if="!exam.length">
+      <div class="empty">No exam questions for this topic yet.</div>
+    </template>
+
+    <template x-if="exam.length">
+      <div class="toc-layout exam-layout">
+        <aside class="toc">
+          <h2 class="toc-title">Questions</h2>
+          <ul class="toc-list">
+            <template x-for="(qi, i) in examOrder" :key="exam[qi].id">
+              <li>
+                <a class="toc-item" href="#" @click.prevent="examIndex = i"
+                   :class="{ active: examIndex === i }" :aria-current="examIndex === i ? 'true' : null">
+                  <span class="toc-num" x-text="(i+1) + '.'"></span>
+                  <span class="toc-label"><span class="q-type" :class="exam[qi].type" x-text="typeLabel(exam[qi].type)"></span></span>
+                  <span class="toc-badge q-dot" :class="examStatus(exam[qi])" :title="examStatus(exam[qi])"></span>
+                </a>
+              </li>
+            </template>
+          </ul>
+        </aside>
+
+        <article class="content">
+          <template x-if="examResult">
+            <section id="exam-score" class="exam-score" :class="examResult.pass ? 'pass' : 'fail'">
+              <div class="score-head">
+                <span class="score-pct" x-text="examResult.pct + '%'"></span>
+                <span class="score-raw" x-text="`${examResult.score} / ${examResult.total} correct`"></span>
+                <span class="score-idk" x-show="examResult.dontKnow" x-text="`? ${examResult.dontKnow} don't know`"></span>
+                <span class="score-verdict" x-text="examResult.pass ? '✓ PASS' : '✗ FAIL'"></span>
+              </div>
+              <p class="score-note">Pass mark here: 70%. The real exam reports a <em>scaled</em> score (100–1000) and passes at 700, so this is only an approximation.</p>
+              <table class="score-tasks">
+                <thead><tr><th>Task</th><th>Correct</th><th>%</th></tr></thead>
+                <tbody>
+                  <template x-for="t in examResult.byTask" :key="t.task">
+                    <tr>
+                      <td x-text="t.task"></td>
+                      <td x-text="`${t.correct} / ${t.total}`"></td>
+                      <td :class="t.correct / t.total >= 0.7 ? 'ok' : 'no'" x-text="Math.round(t.correct / t.total * 100) + '%'"></td>
+                    </tr>
+                  </template>
+                </tbody>
+              </table>
+              <p class="save-status" x-show="examSave" :class="examSave ? examSave.state : ''">
+                <span x-show="examSave && examSave.state === 'saving'">Saving answers to progress…</span>
+                <span x-show="examSave && examSave.state === 'saved'" x-text="examSave ? `💾 Saved ${examSave.saved} answers to progress` : ''"></span>
+                <span x-show="examSave && examSave.state === 'error' && examSave.error" x-text="examSave ? examSave.error : ''"></span>
+                <span x-show="examSave && examSave.state === 'error' && !examSave.error">Not saved to disk — start the viewer with <code>python3 serve.py</code></span>
+              </p>
+              <button class="retake-btn" @click="retakeExam()">↻ Retake (shuffled)</button>
+            </section>
+          </template>
+
+          <template x-for="q in (examCur() ? [examCur()] : [])" :key="q.id">
+            <div class="exercise exam-q">
+              <h2 class="ex-title">
+                <span x-text="`Question ${examIndex + 1} of ${exam.length}`"></span>
+                <span class="q-type" :class="q.type" x-text="typeLabel(q.type)"></span>
+                <span class="q-task" x-show="q.task" x-text="'Task ' + q.task"></span>
+              </h2>
+
+              <div class="ex-prompt" x-html="renderSection(q.question)"></div>
+              <div class="q-note" x-show="q.type === 'multi'" x-text="`Select ${(q.answer || []).length}`"></div>
+              <div class="q-note" x-show="q.type === 'order'">Use ↑ / ↓ to put the items in the correct order.</div>
+              <div class="q-note" x-show="q.type === 'match'">Choose the matching option for each item.</div>
+
+              <!-- single / multi -->
+              <template x-if="q.type === 'single' || q.type === 'multi'">
+                <div class="q-options">
+                  <template x-for="(opt, oi) in q.options" :key="oi">
+                    <label class="q-opt" :class="optClass(q, oi)">
+                      <input :type="q.type === 'single' ? 'radio' : 'checkbox'" :name="'q-' + q.id"
+                             :checked="eq(q.id).picked.includes(oi)" :disabled="eq(q.id).checked"
+                             @change="togglePick(q, oi)">
+                      <span class="q-letter" x-text="letter(oi)"></span>
+                      <span class="q-opt-body" x-html="renderSection(opt)"></span>
+                    </label>
+                  </template>
+                </div>
+              </template>
+
+              <!-- order -->
+              <template x-if="q.type === 'order'">
+                <div>
+                  <ol class="q-order">
+                    <template x-for="(oi, pos) in eq(q.id).order" :key="oi">
+                      <li class="q-opt" :class="orderClass(q, pos)">
+                        <span class="q-letter" x-text="pos + 1"></span>
+                        <span class="q-opt-body" x-html="renderSection(q.options[oi])"></span>
+                        <span class="q-move">
+                          <button @click="moveItem(q, pos, -1)" :disabled="eq(q.id).checked || pos === 0" title="move up">↑</button>
+                          <button @click="moveItem(q, pos, 1)" :disabled="eq(q.id).checked || pos === eq(q.id).order.length - 1" title="move down">↓</button>
+                        </span>
+                      </li>
+                    </template>
+                  </ol>
+                  <div class="q-correct" x-show="eq(q.id).checked && !eq(q.id).correct">
+                    <h3 class="ex-h">Correct order</h3>
+                    <ol>
+                      <template x-for="(ai, k) in (q.answer || [])" :key="k">
+                        <li x-html="renderSection(q.options[ai])"></li>
+                      </template>
+                    </ol>
+                  </div>
+                </div>
+              </template>
+
+              <!-- match -->
+              <template x-if="q.type === 'match'">
+                <div>
+                  <div class="q-options q-match-opts">
+                    <template x-for="(opt, oi) in q.options" :key="oi">
+                      <div class="q-opt static">
+                        <span class="q-letter" x-text="letter(oi)"></span>
+                        <span class="q-opt-body" x-html="renderSection(opt)"></span>
+                      </div>
+                    </template>
+                  </div>
+                  <template x-for="(p, pi) in (q.prompts || [])" :key="pi">
+                    <div class="q-match-row" :class="matchClass(q, pi)">
+                      <div class="q-opt-body" x-html="renderSection(p)"></div>
+                      <select :disabled="eq(q.id).checked" @change="setMatch(q, pi, $event.target.value)">
+                        <option value="" :selected="eq(q.id).match[pi] === null">— choose —</option>
+                        <template x-for="(opt, oi) in q.options" :key="oi">
+                          <option :value="oi" :selected="eq(q.id).match[pi] === oi" x-text="letter(oi) + '. ' + plain(opt)"></option>
+                        </template>
+                      </select>
+                      <span class="q-fix" x-show="eq(q.id).checked && eq(q.id).match[pi] !== (q.answer || [])[pi]"
+                            x-text="'→ ' + letter((q.answer || [])[pi])"></span>
+                    </div>
+                  </template>
+                </div>
+              </template>
+
+              <textarea class="test-paste q-note-input" rows="2" maxlength="500"
+                        placeholder="optional note (why you picked it, what confused you…)"
+                        :disabled="!!examResult"
+                        :value="eq(q.id).note"
+                        @input="examPatch(q.id, { note: $event.target.value })"></textarea>
+
+              <div class="test-actions exam-actions">
+                <button class="check" @click="checkQuestion(q)" :disabled="eq(q.id).checked">▶ Check</button>
+                <button class="check idk-btn" :class="{ on: eq(q.id).idk }" @click="toggleIdk(q)"
+                        :disabled="eq(q.id).checked" :aria-pressed="eq(q.id).idk ? 'true' : 'false'"
+                        title="counts as not correct, tracked separately from wrong answers">? I don't know</button>
+                <span class="test-result" x-show="eq(q.id).checked"
+                      :class="eq(q.id).idk ? 'idk' : (eq(q.id).correct ? 'pass' : 'fail')"
+                      x-text="eq(q.id).idk ? '? don\'t know' : (eq(q.id).correct ? '✓ correct' : '✗ incorrect')"></span>
+                <span class="exam-nav">
+                  <button class="check" @click="examGo(-1)" :disabled="examIndex === 0">◀ Prev</button>
+                  <button class="check" @click="examGo(1)" :disabled="examIndex >= exam.length - 1">Next ▶</button>
+                </span>
+              </div>
+
+              <div class="solution" x-show="eq(q.id).checked">
+                <h3 class="ex-h">Explanation</h3>
+                <div class="sol-explain" x-html="renderSection(q.explanation || '')"></div>
+                <template x-if="isUrl(q.source)">
+                  <a class="q-source" :href="q.source" target="_blank" rel="noopener">Source ↗</a>
+                </template>
+                <template x-if="q.source && !isUrl(q.source)">
+                  <span class="q-source" style="color: var(--fg-muted); border-bottom: 0"
+                        x-text="'Source: ' + q.source"></span>
+                </template>
+              </div>
+            </div>
+          </template>
+        </article>
+      </div>
+    </template>
+  </main>
+
+  <!-- PROGRESS MODE -->
+  <main x-show="mode === 'progress'" class="paged progress">
+    <template x-if="!topics.length">
+      <div class="empty">No topics yet. Run <code>/tutor &lt;topic&gt;</code> in Claude Code to add one.</div>
+    </template>
+
+    <template x-if="topics.length && progressLoaded && progress && !progress.total">
+      <div class="empty">
+        <p x-text="progressMissing ? 'No progress recorded for this topic yet.' : 'progress.jsonl has no valid entries yet.'"></p>
+        <p>Answers are appended to <code x-text="`${topic}/progress.jsonl`"></code> when you
+          <strong>Submit</strong> an exam while the viewer runs with <code>python3 serve.py</code>,
+          and when the tutor logs quiz answers during a chat session.</p>
+      </div>
+    </template>
+
+    <template x-if="progress && progress.total">
+      <div class="toc-layout progress-layout">
+        <aside class="toc">
+          <h2 class="toc-title">Progress</h2>
+          <ul class="toc-list">
+            <template x-for="s in PROG_TOC" :key="s.id">
+              <li>
+                <a class="toc-item" :href="`#${s.id}`" :data-id="s.id"
+                   :class="{ active: tocActive.progress === s.id }"
+                   :aria-current="tocActive.progress === s.id ? 'true' : null"
+                   @click.prevent="tocGo('progress', s.id)">
+                  <span class="toc-label" x-text="s.text"></span>
+                  <span class="toc-badge toc-count" x-show="s.count" x-text="s.count ? progress[s.count].length : ''"></span>
+                </a>
+              </li>
+            </template>
+          </ul>
+        </aside>
+
+        <article class="content">
+          <section id="prog-overview" class="prog-section">
+            <h2 class="cheat-h">Overview</h2>
+            <div class="prog-stats">
+              <div class="stat"><span class="stat-n" x-text="progress.total"></span><span class="stat-l">answers</span></div>
+              <div class="stat ok"><span class="stat-n" x-text="progress.counts.correct"></span><span class="stat-l">correct</span></div>
+              <div class="stat no"><span class="stat-n" x-text="progress.counts.wrong"></span><span class="stat-l">wrong</span></div>
+              <div class="stat idk"><span class="stat-n" x-text="progress.counts.dont_know"></span><span class="stat-l">don't know</span></div>
+              <div class="stat"><span class="stat-n" x-text="progress.trend.length"></span><span class="stat-l">exam runs</span></div>
+            </div>
+          </section>
+
+          <section id="prog-tasks" class="prog-section">
+            <h2 class="cheat-h">By task</h2>
+            <div class="table-wrap">
+              <table class="score-tasks prog-table">
+                <thead><tr><th>Task</th><th>Answered</th><th>✓</th><th>✗</th><th>?</th><th>Mastery</th></tr></thead>
+                <tbody>
+                  <template x-for="t in progress.byTask" :key="t.task">
+                    <tr>
+                      <td x-text="t.task"></td>
+                      <td x-text="t.answered"></td>
+                      <td class="ok" x-text="t.correct"></td>
+                      <td class="no" x-text="t.wrong"></td>
+                      <td class="idk" x-text="t.dont_know"></td>
+                      <td>
+                        <span class="mastery" :class="t.mastery >= 70 ? 'ok' : 'no'">
+                          <span class="mastery-bar"><span :style="`width: ${t.mastery}%`"></span></span>
+                          <span x-text="t.mastery + '%'"></span>
+                        </span>
+                      </td>
+                    </tr>
+                  </template>
+                </tbody>
+              </table>
+            </div>
+            <p class="score-note">Mastery = share of <em>correct</em> results over each question's
+              <strong>last 5 attempts</strong> (grouped by question id); answers logged without an id count via the
+              task's <strong>last 10</strong> such answers. Wrong and “don't know” both count as not correct.
+              ✓ / ✗ / ? columns are all-time totals.</p>
+          </section>
+
+          <section id="prog-weak" class="prog-section">
+            <h2 class="cheat-h">Weakest tasks</h2>
+            <template x-if="!progress.weakest.length">
+              <p class="score-note">Need at least 2 answers in a task to rank it.</p>
+            </template>
+            <ol class="weak-list">
+              <template x-for="t in progress.weakest" :key="t.task">
+                <li>
+                  <span class="weak-task" x-text="'Task ' + t.task"></span>
+                  <span class="mastery" :class="t.mastery >= 70 ? 'ok' : 'no'">
+                    <span class="mastery-bar"><span :style="`width: ${t.mastery}%`"></span></span>
+                    <span x-text="t.mastery + '%'"></span>
+                  </span>
+                  <span class="weak-meta" x-text="`${t.answered} answers`"></span>
+                </li>
+              </template>
+            </ol>
+          </section>
+
+          <section id="prog-review" class="prog-section">
+            <h2 class="cheat-h">Review next</h2>
+            <p class="score-note">Questions whose <em>most recent</em> result is wrong or “don't know”.</p>
+            <template x-if="!progress.review.length">
+              <p class="score-note">Nothing to review — every question's latest answer was correct. 🎉</p>
+            </template>
+            <ul class="prog-list">
+              <template x-for="e in progress.review" :key="e.key">
+                <li class="prog-item" :class="e.result">
+                  <div class="prog-q" x-text="e.question"></div>
+                  <div class="prog-meta">
+                    <span class="res-badge" :class="e.result" x-text="resultLabel(e.result)"></span>
+                    <span x-text="'Task ' + e.task"></span>
+                    <span x-text="e.source"></span>
+                    <span x-text="e.date"></span>
+                  </div>
+                  <div class="prog-note" x-show="e.note" x-text="'📝 ' + e.note"></div>
+                </li>
+              </template>
+            </ul>
+          </section>
+
+          <section id="prog-trend" class="prog-section">
+            <h2 class="cheat-h">Exam trend</h2>
+            <template x-if="!progress.trend.length">
+              <p class="score-note">No submitted exams logged yet.</p>
+            </template>
+            <template x-if="progress.trend.length">
+              <div>
+                <div class="trend-wrap" x-html="progress.trendSvg"></div>
+                <p class="score-note">Score % per submitted exam, oldest → newest. Dashed line = 70% pass mark.</p>
+                <div class="table-wrap">
+                  <table class="score-tasks prog-table">
+                    <thead><tr><th>#</th><th>Date</th><th>Score</th><th>?</th><th>%</th></tr></thead>
+                    <tbody>
+                      <template x-for="(r, i) in progress.trend" :key="r.run">
+                        <tr>
+                          <td x-text="i + 1"></td>
+                          <td x-text="r.date"></td>
+                          <td x-text="`${r.correct} / ${r.total}`"></td>
+                          <td class="idk" x-text="r.dont_know"></td>
+                          <td :class="r.pct >= 70 ? 'ok' : 'no'" x-text="r.pct + '%'"></td>
+                        </tr>
+                      </template>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </template>
+          </section>
+
+          <section id="prog-recent" class="prog-section">
+            <h2 class="cheat-h">Recent activity</h2>
+            <ul class="prog-list">
+              <template x-for="e in progress.recent" :key="e.key">
+                <li class="prog-item" :class="e.result">
+                  <div class="prog-q" x-text="e.question"></div>
+                  <div class="prog-meta">
+                    <span class="res-badge" :class="e.result" x-text="resultLabel(e.result)"></span>
+                    <span x-text="'Task ' + e.task"></span>
+                    <span x-text="e.source"></span>
+                    <span x-text="e.date"></span>
+                  </div>
+                  <div class="prog-answer" x-show="e.answer" x-text="'Answer: ' + e.answer"></div>
+                  <div class="prog-note" x-show="e.note" x-text="'📝 ' + e.note"></div>
+                </li>
+              </template>
+            </ul>
+          </section>
+        </article>
+      </div>
+    </template>
+  </main>
+
+  <footer x-show="mode === 'flashcards'">
+    <span class="mono">space</span> flip ·
+    <span class="mono">←</span>/<span class="mono">→</span> nav ·
+    <span class="mono">s</span> shuffle ·
+    <span class="mono">k</span> got it ·
+    <span class="mono">u</span> need practice ·
+    <span class="mono">Shift</span>+<span class="mono">R</span> reset progress
+  </footer>
+
+  <script src="study.js"></script>
+</body>
+</html>

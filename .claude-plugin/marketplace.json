@@ -1,0 +1,14 @@
+{
+  "name": "my-tutor",
+  "description": "A Socratic tutor skill with a local study viewer, progress tracking and spaced review.",
+  "owner": {
+    "name": "ManuLasker"
+  },
+  "plugins": [
+    {
+      "name": "tutor",
+      "source": "./",
+      "description": "Interactive tutor: probe, plan, Socratic lessons, flashcards, exercises, exams, progress tracking and spaced review, with a local study viewer."
+    }
+  ]
+}
