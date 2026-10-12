@@ -21,10 +21,11 @@
 * { box-sizing: border-box; }
 [x-cloak] { display: none !important; }
 
+/* No height: 100% on body: the sticky header only sticks inside its parent, and a
+   viewport-tall body would let it scroll away after one screen. */
 html, body {
   margin: 0;
   padding: 0;
-  height: 100%;
 }
 
 body {
@@ -46,7 +47,8 @@ header {
   padding: 0.75rem 1.25rem;
   border-bottom: 1px solid var(--border);
   background: var(--surface);
-  /* Sticky on desktop so every mode's sticky sidebar can sit right below it. */
+  /* Sticky at every width, so the topic picker and modes are always one glance away;
+     the desktop sidebar sits right below it. */
   position: sticky;
   top: 0;
   z-index: 20;
@@ -1453,15 +1455,15 @@ html.mmd-noscroll, html.mmd-noscroll body { overflow: hidden; }
 /* MOBILE ---------------------------------------------------- */
 
 @media (max-width: 720px) {
-  /* Header is a tall column here: not sticky, so nothing sticks below it. */
-  :root { --sticky-top: 0px; }
-  header { flex-direction: column; align-items: stretch; position: static; }
+  /* Header stays sticky; kept short by putting the modes on one scrollable row. */
+  header { flex-direction: column; align-items: stretch; gap: 0.5rem; padding: 0.6rem 1rem; }
   .mermaid-viewport { --mmd-max-h: 320px; }
   .face .mermaid-viewport { --mmd-max-h: 260px; }
   .mmd-legend .lg-tip { margin-left: 0; }
   .controls { margin-left: 0; justify-content: center; flex-wrap: wrap; }
-  .mode-toggle { align-self: center; max-width: 100%; flex-wrap: wrap; justify-content: center; }
-  .mode-toggle button { padding: 0.5rem 0.7rem; }
+  .mode-toggle { max-width: 100%; overflow-x: auto; scrollbar-width: none; }
+  .mode-toggle::-webkit-scrollbar { display: none; }
+  .mode-toggle button { flex: 0 0 auto; white-space: nowrap; padding: 0.5rem 0.7rem; }
   .face { padding: 1.5rem 1.25rem; font-size: 0.98rem; }
   .card { min-height: 480px; }
   header select { min-width: 0; width: 100%; }
