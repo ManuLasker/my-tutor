@@ -1,6 +1,7 @@
 ---
 name: tutor
 description: Interactive tutor that teaches a topic in depth and makes it stick. It runs an optional probe, a dependency-map plan, Socratic chunked teaching with diagrams and real code, Q&A, flashcards, a cheat sheet, hands-on exercises, an exam question bank and a graded quiz. Everything is saved to a learning folder with a local study viewer, per-answer progress tracking and spaced review. Use whenever the user says "teach me X", "/tutor X", "I want to learn X", "quiz me on X", "practice X", "what should I review", or wants an explanation they can remember long-term. If the topic was taught before, offers weak-spot review, practice or a re-quiz instead of re-teaching. Also builds vocabulary decks (recognise + produce) from a book word list, e.g. "/tutor vocab for my book, volume 2".
+license: MIT
 metadata:
   version: "2.0.0"
 hooks:
