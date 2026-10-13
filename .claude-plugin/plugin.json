@@ -1,6 +1,6 @@
 {
   "name": "tutor",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "description": "Interactive tutor: probe, plan, Socratic lessons, flashcards, exercises, exams, progress tracking and spaced review, with a local study viewer.",
   "author": {
     "name": "ManuLasker"
