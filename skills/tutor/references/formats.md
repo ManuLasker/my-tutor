@@ -108,7 +108,7 @@ Template:
 - **Atomic:** one fact per card.
 - **Count scales with the topic:** about 3–5 cards per distinct concept, gotcha or flag taught. Small topics land around 20–40, wide ones well past 100. Never pad with near-duplicates.
 - **Cover the gotchas**, not just definitions. Every "wait, why doesn't this work?" moment and every clarifying question the learner asked becomes a card.
-- Card ids in progress are a hash of `q`. Editing a card's question starts its flashcard history fresh, so fix typos sparingly.
+- Card ids are a hash of `q`, both in progress and in the viewer's known / unknown marks. Editing a card's question starts its flashcard history fresh, so fix typos sparingly. Editing only the answer, or adding, removing and reordering cards, keeps every mark.
 
 ## cheatsheet.json
 

@@ -1,10 +1,19 @@
 // Study app — Alpine.js component.
+
+// Stable id per card text (FNV-1a of `q`): the qid of flashcard progress events and
+// the key of the known/unknown map, so adding or removing cards never shifts marks.
+function cardId(q) {
+  q = String(q || '');
+  let h = 0x811c9dc5;
+  for (let i = 0; i < q.length; i++) h = Math.imul(h ^ q.charCodeAt(i), 0x01000193) >>> 0;
+  return `card:${h.toString(16).padStart(8, '0')}`;
+}
 //
 // Seven modes: 'plan', 'lesson', 'flashcards', 'cheatsheet', 'exercises', 'exam'
 // and 'progress', driven by per-topic files under <topic-slug>/. Plan and Lesson
 // share one markdown-document view ("docs": plan.md / session.md, see DOCS). Topic list comes
-// from topics.json at the root. Per-topic known/unknown progress is persisted to
-// localStorage, plus the last exam result per topic (`exam:<topic>`).
+// from topics.json at the root. Per-topic known/unknown marks are persisted to
+// localStorage keyed by card id (see cardId), plus the last exam result per topic (`exam:<topic>`).
 // Submitted exams are also POSTed to /api/progress (serve.py), which appends
 // them to <topic>/progress.jsonl — the file the Progress mode reads.
 //
@@ -721,7 +730,8 @@ document.addEventListener('alpine:init', () => {
     index: 0,
     flipped: false,
     unknownOnly: false,
-    known: {},
+    known: {},            // { [cardId]: true (known) | false (unknown) }
+    cardIds: [],          // cardId(q) per card, same order as `cards`
     flash: null,          // 'known' | 'unknown' | null — drives the flash animation
     _flashTimer: null,
 
@@ -865,7 +875,11 @@ document.addEventListener('alpine:init', () => {
       this.resetExam(false);
       this.examLast = this.loadExamLast();
 
-      this.known = this.loadKnown();
+      this.cardIds = this.cards.map(c => cardId(c && c.q));
+      const topic = this.topic;
+      const known = await this.loadKnown();
+      if (topic !== this.topic) return;     // topic switched while loading
+      this.known = known;
       this.applyFilter();
       this.index = 0;
       this.flipped = false;
@@ -1703,12 +1717,35 @@ document.addEventListener('alpine:init', () => {
       if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
     },
 
-    loadKnown() {
+    // The known map is keyed by card id. With no saved map, or a legacy one keyed by
+    // deck position (shifts when cards are added / removed), rebuild it from the
+    // flashcard marks in progress.jsonl (latest mark wins); without any, convert the
+    // legacy positions against the current deck.
+    async loadKnown() {
+      const topic = this.topic;
+      const key = `known:${topic}`;
+      let saved = null;
+      try { saved = JSON.parse(localStorage.getItem(key) || 'null'); } catch { /* storage unavailable */ }
+      const legacy = saved && typeof saved === 'object' && Object.keys(saved).some(k => /^\d+$/.test(k));
+      if (saved && typeof saved === 'object' && !legacy) return saved;
+
+      const known = {};
       try {
-        return JSON.parse(localStorage.getItem(`known:${this.topic}`) || '{}');
-      } catch {
-        return {};
+        const r = await fetch(`${topic}/progress.jsonl`, { cache: 'no-store' });
+        if (r.ok) {
+          for (const line of (await r.text()).split('\n')) {
+            try {
+              const e = JSON.parse(line);
+              if (e && e.source === 'flashcard' && typeof e.qid === 'string') known[e.qid] = e.result === 'correct';
+            } catch { /* skip bad line */ }
+          }
+        }
+      } catch { /* no progress file: static server or offline */ }
+      if (!Object.keys(known).length && legacy) {
+        for (const [i, v] of Object.entries(saved)) if (this.cardIds[i]) known[this.cardIds[i]] = v;
       }
+      try { localStorage.setItem(key, JSON.stringify(known)); } catch { /* storage unavailable */ }
+      return known;
     },
 
     saveKnown() {
@@ -1720,7 +1757,7 @@ document.addEventListener('alpine:init', () => {
     applyFilter() {
       const indexed = this.cards.map((card, i) => ({ card, origIndex: i }));
       this.filtered = this.unknownOnly
-        ? indexed.filter(x => !this.known[x.origIndex])
+        ? indexed.filter(x => !this.known[this.cardIds[x.origIndex]])
         : indexed;
     },
 
@@ -1768,9 +1805,9 @@ document.addEventListener('alpine:init', () => {
       if (cur.origIndex < 0) return;
 
       // Reassign (not in-place mutate) so Alpine reliably re-runs knownCount()
-      // and the status badge. In-place `this.known[i] = x` doesn't always
+      // and the status badge. In-place `this.known[id] = x` doesn't always
       // trigger reactivity for Object.values()-based computeds.
-      this.known = { ...this.known, [cur.origIndex]: isKnown };
+      this.known = { ...this.known, [this.cardIds[cur.origIndex]]: isKnown };
       this.saveKnown();
       this.logCard(cur.card, isKnown);
 
@@ -1804,9 +1841,7 @@ document.addEventListener('alpine:init', () => {
     logCard(card, isKnown) {
       const q = String((card && card.q) || '');
       if (!q || !this.topic) return;
-      let h = 0x811c9dc5;                                  // FNV-1a: stable id per card text
-      for (let i = 0; i < q.length; i++) h = Math.imul(h ^ q.charCodeAt(i), 0x01000193) >>> 0;
-      const qid = `card:${h.toString(16).padStart(8, '0')}`;
+      const qid = cardId(q);
       const pad = (n) => String(n).padStart(2, '0');
       const d = new Date();
       const ts = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
@@ -1845,7 +1880,7 @@ document.addEventListener('alpine:init', () => {
     currentStatus() {
       const cur = this.current();
       if (cur.origIndex < 0) return 'none';
-      const v = this.known[cur.origIndex];
+      const v = this.known[this.cardIds[cur.origIndex]];
       if (v === true) return 'known';
       if (v === false) return 'unknown';
       return 'none';
@@ -1856,17 +1891,17 @@ document.addEventListener('alpine:init', () => {
     },
 
     knownCount() {
-      return Object.values(this.known).filter(v => v === true).length;
+      return this.cardIds.filter(id => this.known[id] === true).length;
     },
 
     unknownCount() {
-      return Object.values(this.known).filter(v => v === false).length;
+      return this.cardIds.filter(id => this.known[id] === false).length;
     },
 
     resetKnown() {
       if (!confirm('Reset known/unknown progress for this topic?')) return;
       this.known = {};
-      try { localStorage.removeItem(`known:${this.topic}`); } catch { /* storage unavailable */ }
+      this.saveKnown();     // keep an empty map so the next load doesn't rebuild it from history
       this.applyFilter();
       this.index = 0;
       this.flipped = false;
