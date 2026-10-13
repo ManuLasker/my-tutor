@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Install the tutor skill for Claude Code and every tool that reads ~/.agents/skills
 # (GitHub Copilot, OpenAI Codex, Cursor, Gemini CLI).
+# Claude Code installs also get the researcher subagent in ~/.claude/agents.
 #
 #   ./install.sh                 symlink into ~/.claude/skills and ~/.agents/skills
 #   ./install.sh --copy          copy instead of symlink (no auto-update via git pull)
@@ -69,6 +70,34 @@ for parent in "${targets[@]}"; do
     echo "copy  $dest"
   fi
 done
+
+# the fact-checking subagent the skill calls before teaching (Claude Code only)
+if [ "$ONLY" != agents ]; then
+  agent_src="$(cd "$SRC/../.." && pwd)/agents/researcher.md"
+  mkdir -p "$BASE/.claude/agents"
+  agent_dest="$BASE/.claude/agents/researcher.md"
+  if [ -L "$agent_dest" ] && [ "$(readlink "$agent_dest")" = "$agent_src" ]; then
+    echo "ok    $agent_dest (already linked to this repo)"
+  elif [ -e "$agent_dest" ] && cmp -s "$agent_dest" "$agent_src" && [ "$FORCE" -ne 1 ]; then
+    echo "ok    $agent_dest (same content; --force to link it to this repo)"
+  elif [ -e "$agent_dest" ] && [ "$FORCE" -ne 1 ]; then
+    echo "exists $agent_dest (a different agent); rerun with --force to replace it" >&2
+  else
+    if [ -e "$agent_dest" ] || [ -L "$agent_dest" ]; then
+      mkdir -p "$HOME/.tutor-install-backups"
+      aside="$HOME/.tutor-install-backups/researcher-$(date +%Y%m%d-%H%M%S).md"
+      mv "$agent_dest" "$aside"
+      echo "moved old agent to $aside"
+    fi
+    if [ "$MODE" = link ]; then
+      ln -s "$agent_src" "$agent_dest"
+      echo "link  $agent_dest -> $agent_src"
+    else
+      cp "$agent_src" "$agent_dest"
+      echo "copy  $agent_dest"
+    fi
+  fi
+fi
 
 if [ -n "$UV" ]; then
   "$UV" run --quiet "$SRC/scripts/topics.py" init

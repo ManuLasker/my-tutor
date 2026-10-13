@@ -55,7 +55,7 @@ TUTOR_HOME/
 
 **Harness differences.** This skill also runs outside Claude Code:
 - No question tool: ask in plain text.
-- No `researcher` subagent: use web search/fetch directly.
+- No `researcher` subagent (it ships with the Claude Code install, in the repo's `agents/`): use web search/fetch directly.
 - No web access at all: say a fact is unverified rather than guessing.
 - Background subagents: if available, generate study files with them while teaching continues; otherwise do it inline.
 - The Stop hook that enforces logging only exists in Claude Code. Everywhere else, the logging rule below is on you.

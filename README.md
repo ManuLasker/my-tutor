@@ -106,6 +106,7 @@ skills/tutor/
 ├── scripts/                 # topics.py, log_progress.py, validate.py, serve.py, build_vocab_deck.py
 ├── assets/viewer/           # the study viewer (Alpine.js, marked, highlight.js, mermaid; all bundled)
 └── hooks/                   # Claude Code Stop hook: blocks a turn that graded an answer without logging it
+agents/researcher.md         # Claude Code subagent that fact-checks a claim before it is taught
 .claude-plugin/              # Claude Code plugin marketplace manifest
 install.sh
 ```
@@ -113,6 +114,7 @@ install.sh
 ## Notes
 
 - **The `hooks` field** in `SKILL.md` is a Claude Code extension. Other tools ignore it, but the strict `skills-ref validate` reports it as an unexpected field. The hook is only a safety net: the skill's logging rule works without it.
+- **The `researcher` subagent** fact-checks facts, limits and doc URLs before the tutor teaches them. The plugin install and `install.sh` (into `~/.claude/agents/`) set it up for Claude Code. Other tools fall back to their own web search.
 - **Keep the installed folder named `tutor`:** the hook finds its script by that name.
 - **Windows:** use the plugin or `npx skills` install. `install.sh` works in Git Bash, but Git Bash copies instead of symlinking unless symlinks are enabled, so `git pull` won't update that install. The Claude Code Stop hook runs through Git Bash, which Claude Code on Windows already requires.
 - **Scripts are standard-library Python, run with `uv run`.** They resolve the data folder themselves, so the agent never edits `topics.json` or `progress.jsonl` by hand.
